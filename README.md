@@ -1,3 +1,3 @@
-# MoreLogin-API-Demo
+# MoreLogin-API-Demos
 site: https://www.morelogin.com   
-Some code demo for MoreLogin API.
+Some code demos for MoreLogin API.
