@@ -33,6 +33,7 @@ async def run(playwright: Playwright):
         print('run-error: ' + error_message)
 
 # start a browser profile, and return cdp-url
+# if browser already opened, the browser will auto bring to front
 async def startEnv(env_id, appId, secretKey, baseUrl):
     requestPath = baseUrl + '/api/env/start'  
     data = { 
@@ -57,10 +58,14 @@ async def operationEnv(cdp_url, playwright):
         
         # try open page
         page1 = await default_context.new_page()
-        await page1.goto('https://www.speedtest.net/')
+        await page1.goto('https://ipinfo.io')
 
         page2 = await default_context.new_page()
-        await page2.goto('https://ipinfo.io')
+        await page2.goto('https://www.google.com/')
+        print(page2.title)
+        await page2.fill('[name="q"]', 'MoreLogin')
+        await page2.press('[name="q"]', 'Enter')
+        #await page2.keyboard.press('Enter')  
 
         # try close and clear resource
         # await page1.close()
