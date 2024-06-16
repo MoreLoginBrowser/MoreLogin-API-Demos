@@ -17,65 +17,77 @@ async def main():
 
 async def run(playwright: Playwright):
     try:
-        env_id = '1797528993729015808' # browser profile id, please check API-demo: list_browser_profiles.py 
-        cdp_url = await startEnv(env_id, APPID, SECRETKEY, BASEURL)
+        # browser's order num, you can get it from profile list page: Numerical order 
+        uniqueId = 59
+        # browser profile id, please check API-demo: list_browser_profiles.py
+        envId = ''
+        cdpUrl = await startEnv(envId, uniqueId, APPID, SECRETKEY, BASEURL)
 
-        await operationEnv(cdp_url, playwright)
+        await operationEnv(cdpUrl, playwright)
 
         # wait 10 second
         await asyncio.sleep(10)
 
         # try close env
-        await stopEnv(env_id, APPID, SECRETKEY, BASEURL)
+        await stopEnv(envId, uniqueId, APPID, SECRETKEY, BASEURL)
+        print('env closed')
 
     except:
-        error_message = traceback.format_exc()
-        print('run-error: ' + error_message)
+        errorMessage = traceback.format_exc()
+        print('run-error: ' + errorMessage)
 
 # start a browser profile, and return cdp-url
 # if browser already opened, the browser will auto bring to front
-async def startEnv(env_id, appId, secretKey, baseUrl):
+async def startEnv(envId, uniqueId, appId, secretKey, baseUrl):
     requestPath = baseUrl + '/api/env/start'  
+    # Send the envId(profile ID) or the uniqueId(profile order number). 
+    # If both are sent, the profile ID takes precedence. 
     data = { 
-        'id': env_id 
+        'envId': envId,
+        'uniqueId': uniqueId
     }
     headers = requestHeader(appId, secretKey)
     response = postRequest(requestPath, data, headers).json()
 
     if response['code'] != 0:
         print(response['msg'])
-        print('please check env_id')
+        print('please check envId')
         sys.exit()
 
     port = response['data']['debugPort']
-    cdp_url = 'http://127.0.0.1:' + port
-    return  cdp_url
+    print('env open result:', response['data'])
+    cdpUrl = 'http://127.0.0.1:' + port
+    return  cdpUrl
 
 # open page and operation
-async def operationEnv(cdp_url, playwright):
-        browser = await playwright.chromium.connect_over_cdp( cdp_url )
-        default_context = browser.contexts[0]
+async def operationEnv(cdpUrl, playwright):
+        browser = await playwright.chromium.connect_over_cdp( cdpUrl )
+        defaultContext = browser.contexts[0]
         
         # try open page
-        page1 = await default_context.new_page()
+        page1 = await defaultContext.new_page()
         await page1.goto('https://ipinfo.io')
 
-        page2 = await default_context.new_page()
+        page2 = await defaultContext.new_page()
         await page2.goto('https://www.google.com/')
         print(page2.title)
         await page2.fill('[name="q"]', 'MoreLogin')
         await page2.press('[name="q"]', 'Enter')
         #await page2.keyboard.press('Enter')  
+        print('search executed')
 
         # try close and clear resource
         # await page1.close()
         # await page2.close()
 
 # close a browser profile
-async def stopEnv(env_id, appId, secretKey, baseUrl):
+async def stopEnv(envId, uniqueId, appId, secretKey, baseUrl):
     requestPath = '/api/env/close'   
+    # Send the envId(profile ID) or the uniqueId(profile order number). 
+    # If both are sent, the profile ID takes precedence. 
     data = { 
-        'id': env_id 
+        'envId': envId,
+        'uniqueId': uniqueId
     }
     headers = requestHeader(appId, secretKey)
     response = postRequest(baseUrl + requestPath, data, headers).json()

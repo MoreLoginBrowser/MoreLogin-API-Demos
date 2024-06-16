@@ -16,39 +16,45 @@ SECRETKEY = 'abcdef'
 BASEURL = 'http://127.0.0.1:40000'
 
 async def main():
-    try:        
-        env_id = '1797528993729015808' # browser profile id, please check API-demo: list_browser_profiles.py 
-        debug_url = await startEnv(env_id, APPID, SECRETKEY, BASEURL)
-        print(debug_url)
+    try:
+        # browser's order num, you can get it from profile list page: Numerical order 
+        uniqueId = 59
+        # browser profile id, please check API-demo: list_browser_profiles.py
+        envId = ''
+        debugUrl = await startEnv(envId, uniqueId, APPID, SECRETKEY, BASEURL)
+        print(debugUrl)
         
-        driver = createWebDriver(debug_url)
+        driver = createWebDriver(debugUrl)
         operationEnv(driver)
     except:
-        error_message = traceback.format_exc()
-        print('run-error: ' + error_message)
+        errorMessage = traceback.format_exc()
+        print('run-error: ' + errorMessage)
 
 # create webdriver with exist browser
-def createWebDriver(debug_url):
+def createWebDriver(debugUrl):
     opts = webdriver.ChromeOptions()
     # opts.set_capability('browserVersion', str(version))
-    opts.add_experimental_option('debuggerAddress', debug_url)
+    opts.add_experimental_option('debuggerAddress', debugUrl)
     driver = webdriver.Chrome(options=opts)
     print(driver.current_url)
     return driver
 
 # start a browser profile, and return debug-url
 # if browser already opened, the browser will auto bring to front
-async def startEnv(env_id, appId, secretKey, baseUrl):
+async def startEnv(envId, uniqueId, appId, secretKey, baseUrl):
     requestPath = baseUrl + '/api/env/start'  
+    # Send the envId(profile ID) or the uniqueId(profile order number). 
+    # If both are sent, the profile ID takes precedence. 
     data = { 
-        'id': env_id 
+        'envId': envId,
+        'uniqueId': uniqueId
     }
     headers = requestHeader(appId, secretKey)
     response = postRequest(requestPath, data, headers).json()
 
     if response['code'] != 0:
         print(response['msg'])
-        print('please check env_id')
+        print('please check envId')
         sys.exit()
 
     port = response['data']['debugPort']
