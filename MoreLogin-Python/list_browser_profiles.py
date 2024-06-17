@@ -1,3 +1,11 @@
+"""
+Description: 
+Queries the added profile information. Users can query only the profile information to which they have access.
+
+Documentation:
+https://docs.morelogin.com/l/en/interface-documentation/browser-profile#7_get_a_list_of_browser_profiles
+"""
+
 # pip install requests pycryptodome Crypto
 from base_morelogin.base_func import requestHeader, postRequest
 
