@@ -1,3 +1,12 @@
+"""
+Description: 
+Used to start the profile browser, then connected to the browser with cdp and try google search.
+Note: To use this interface, you need to start the MoreLogin client and successfully log in.
+
+Documentation:
+https://docs.morelogin.com/l/en/interface-documentation/browser-profile#1_start_browser_profile
+"""
+
 # pip install requests playwright pycryptodome Crypto
 from base_morelogin.base_func import requestHeader, postRequest
 
