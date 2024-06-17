@@ -5,6 +5,7 @@ from base_morelogin.base_func import requestHeader, postRequest
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.chrome.service import Service
 
 import sys
 import asyncio
@@ -33,9 +34,19 @@ async def main():
 # create webdriver with exist browser
 def createWebDriver(debugUrl):
     opts = webdriver.ChromeOptions()
-    # opts.set_capability('browserVersion', str(version))
+    # if you get error like: 
+    #   selenium.common.exceptions.WebDriverException: Message: unknown error: cannot connect to chrome at 127.0.0.1:50644
+    #   from session not created: This version of ChromeDriver only supports Chrome version 125
+    #   Current browser version is 124.0.6367.223
+    #
+    # please uncommented this code, and change '124' to your env's version, and selenium will auto download the right version
+    # opts.set_capability('browserVersion', '124')
     opts.add_experimental_option('debuggerAddress', debugUrl)
     driver = webdriver.Chrome(options=opts)
+
+    # if you need custom chromedriver, you can use these 2 line codes: 
+    # service = Service(executable_path='D:\chromedriver-124.0.6367.155-win64\chromedriver.exe')
+    # driver = webdriver.Chrome(service=service, options=opts)
     print(driver.current_url)
     return driver
 
