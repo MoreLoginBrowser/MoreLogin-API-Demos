@@ -1,4 +1,4 @@
 # MoreLogin-API-Demos
 
-api documention: https://docs.morelogin.com/l/en/interface-documentation/browser-profile  
+api documention: https://support.morelogin.com/en/collections/10925243-api
 site: https://www.morelogin.com   
