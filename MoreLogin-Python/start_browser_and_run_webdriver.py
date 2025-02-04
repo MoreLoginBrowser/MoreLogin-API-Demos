@@ -21,51 +21,44 @@ import asyncio
 import traceback,time
 
 # From profile list page, click on the API button, and copy API ID and API Key to below.
-APPID = '123456'
-SECRETKEY = 'abcdef'
+APPID = 'appid'
+SECRETKEY = 'secretkey'
 BASEURL = 'http://127.0.0.1:40000'
 
 async def main():
     try:
-        # browser's order num, you can get it from profile list page: Numerical order 
-        uniqueId = 59
+        # browser's order num, you can get it from profile list page: Numerical order
+        uniqueId = 1
         # browser profile id, please check API-demo: list_browser_profiles.py
         envId = ''
-        debugUrl = await startEnv(envId, uniqueId, APPID, SECRETKEY, BASEURL)
+        debugUrl, webDriver = await startEnv(envId, uniqueId, APPID, SECRETKEY, BASEURL)
         print(debugUrl)
-        
-        driver = createWebDriver(debugUrl)
+        print(webDriver)
+        driver = createWebDriver(debugUrl, webDriver)
         operationEnv(driver)
     except:
         errorMessage = traceback.format_exc()
         print('run-error: ' + errorMessage)
 
 # create webdriver with exist browser
-def createWebDriver(debugUrl):
+def createWebDriver(debugUrl, webDriver):
     opts = webdriver.ChromeOptions()
-    # if you get error like: 
-    #   selenium.common.exceptions.WebDriverException: Message: unknown error: cannot connect to chrome at 127.0.0.1:50644
-    #   from session not created: This version of ChromeDriver only supports Chrome version 125
-    #   Current browser version is 124.0.6367.223
-    #
-    # please uncommented this code, and change '124' to your env's version, and selenium will auto download the right version
-    # opts.set_capability('browserVersion', '124')
     opts.add_experimental_option('debuggerAddress', debugUrl)
-    driver = webdriver.Chrome(options=opts)
+    # driver = webdriver.Chrome(options=opts)
 
-    # if you need custom chromedriver, you can use these 2 line codes: 
-    # service = Service(executable_path='D:\chromedriver-124.0.6367.155-win64\chromedriver.exe')
-    # driver = webdriver.Chrome(service=service, options=opts)
+    # if you need custom chromedriver, you can use these 2 line codes:
+    service = Service(executable_path=webDriver)
+    driver = webdriver.Chrome(service=service, options=opts)
     print(driver.current_url)
     return driver
 
 # start a browser profile, and return debug-url
 # if browser already opened, the browser will auto bring to front
 async def startEnv(envId, uniqueId, appId, secretKey, baseUrl):
-    requestPath = baseUrl + '/api/env/start'  
-    # Send the envId(profile ID) or the uniqueId(profile order number). 
-    # If both are sent, the profile ID takes precedence. 
-    data = { 
+    requestPath = baseUrl + '/api/env/start'
+    # Send the envId(profile ID) or the uniqueId(profile order number).
+    # If both are sent, the profile ID takes precedence.
+    data = {
         'envId': envId,
         'uniqueId': uniqueId
     }
@@ -79,7 +72,7 @@ async def startEnv(envId, uniqueId, appId, secretKey, baseUrl):
 
     port = response['data']['debugPort']
     print('env open result:', response['data'])
-    return '127.0.0.1:' + port
+    return '127.0.0.1:' + port, response['data']['webdriver']
 
 # open page and operation
 def operationEnv(driver):
