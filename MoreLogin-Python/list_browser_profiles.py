@@ -1,54 +1,44 @@
 """
-Description: 
+Description:
 Queries the added profile information. Users can query only the profile information to which they have access.
+
+Note: MoreLogin version number cannot be lower than 2.32
 
 Documentation:
 https://docs.morelogin.com/l/en/interface-documentation/browser-profile#7_get_a_list_of_browser_profiles
 """
 
-# pip install requests pycryptodome Crypto
-from base_morelogin.base_func import requestHeader, postRequest
-
-import sys
-import asyncio
 import traceback
+import requests
 
-# From profile list page, click on the API button, and copy API ID and API Key to below.
-APPID = '123456'
-SECRETKEY = 'abcdef'
-BASEURL = 'http://127.0.0.1:40000'
 
-async def main():
+def main():
     try:
-        data = await getEnvList(APPID, SECRETKEY, BASEURL)
-        if len(data['dataList']) > 0:
-            for env in data['dataList']:
-                print(env['id'] + ': ' + env['envName'])
+        data = {
+            "pageNo": 1,  # env list page no
+            "pageSize": 5,  # number of profiles per page
+            "envName": "",  # env name condition for search
+            #'groupId': 123,                 # env group condition for search
+        }
+        response = requests.post(
+            "http://localhost:40000/api/env/page", json=data
+        ).json()
+
+        if response["code"] != 0:
+            print(
+                f"code: {response['code']}, error: {response['msg']}, request_id: {response['requestId']}"
+            )
+            return
+
+        for env in response["data"]["dataList"]:
+            print(env["id"] + ": " + env["envName"])
         else:
-            print('no profile found, please check your condition')
+            print("no profile found, please check your condition")
 
     except:
-        error_message = traceback.format_exc()
-        print('run-error: ' + error_message)
+        error = traceback.format_exc()
+        print(f"run-error: {error}")
 
-# get browser profile env list
-async def getEnvList(appId, secretKey, baseUrl):
-    requestPath = baseUrl + '/api/env/page'  
-    data = { 
-        'pageNo': 1,                    # env list page no
-        'pageSize': 5,                  # number of profiles per page
-        'envName': '',   # env name condition for search
-        #'groupId': 123,                 # env group condition for search
-    }
-    headers = requestHeader(appId, secretKey)
-    response = postRequest(requestPath, data, headers).json()
 
-    if response['code'] != 0:
-        print('error:'+ requestPath + '\r\n' + response['msg'])
-        sys.exit()
-
-    #print(response)
-    return response['data']
-
-if __name__ == '__main__':
-    asyncio.run(main())
+if __name__ == "__main__":
+    main()
