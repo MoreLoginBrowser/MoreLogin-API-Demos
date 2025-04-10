@@ -166,3 +166,6 @@ cython_debug/
 
 # Nodejs
 node_modules
+
+# Macos
+.DS_Store
