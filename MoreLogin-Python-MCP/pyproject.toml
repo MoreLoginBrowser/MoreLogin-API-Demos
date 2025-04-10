@@ -1,0 +1,10 @@
+[project]
+name = "morelogin-python-mcp"
+version = "0.1.0"
+description = "MoreLogin API run in MCP"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "mcp[cli]>=1.6.0",
+    "requests>=2.32.3",
+]
