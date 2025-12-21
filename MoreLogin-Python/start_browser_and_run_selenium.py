@@ -9,9 +9,11 @@ https://docs.morelogin.com/l/en/interface-documentation/browser-profile#1_start_
 
 import time
 import requests
+from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 
 import traceback
 
@@ -19,7 +21,7 @@ import traceback
 def main():
     try:
         # browser's order num, you can get it from profile list page: Numerical order
-        unique_id = 3495
+        unique_id = 1
         # browser profile id, please check API-demo: list_browser_profiles.py
         env_id = ""
         debug_url, webdriver = start(env_id, unique_id)
@@ -41,12 +43,14 @@ def main():
 
 # connect webdriver with exist browser
 def connect(debug_url, webdriver_path):
-    opts = webdriver_path.ChromeOptions()
+    print("connecting to " + webdriver_path)
+
+    opts = Options()
     opts.add_experimental_option("debuggerAddress", debug_url)
 
     # if you need custom chromedriver, you can use these 2 line codes:
     service = Service(executable_path=webdriver_path)
-    driver = webdriver_path.Chrome(service=service, options=opts)
+    driver = webdriver.Chrome(service=service, options=opts)
     return driver
 
 
