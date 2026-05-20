@@ -35,20 +35,16 @@ from pathlib import Path
 import asyncio
 from playwright.async_api import async_playwright, Playwright
 
-from base_morelogin.base_func import requestHeader, postRequest
+from base_morelogin.base_func import postRequest
 
 
 # ==================== Configuration ====================
 
-# MoreLogin API credentials (get from profile list page → API button)
-APPID = ''
-SECRETKEY = ''
-
 # MoreLogin server address
-BASEURL = 'http://serverIP:MoreLoginLocalAPIPort'
+BASEURL = 'http://{server-ip}:{server-port}'
 
 # CDP connection host (same as MoreLogin server)
-CDP_HOST = 'serverIP'
+CDP_HOST = '{server-ip}'
 
 # SSH config for remote socat port forwarding
 SSH_USER = 'server user name'
@@ -225,9 +221,7 @@ class MoreLoginAPI:
         }
 
         for attempt in range(MAX_RETRIES):
-            headers = requestHeader(APPID, SECRETKEY)
-            headers['Content-Type'] = 'application/json'
-            response = postRequest(BASEURL + request_path, data, headers=headers).json()
+            response = postRequest(BASEURL + request_path, data).json()
 
             if response['code'] == 0 and response.get('data'):
                 return response['data']
@@ -260,8 +254,7 @@ class MoreLoginAPI:
             'uniqueId': '',
             'isHeadless': True
         }
-        headers = requestHeader(APPID, SECRETKEY)
-        response = postRequest(request_path, data, headers).json()
+        response = postRequest(request_path, data).json()
 
         if response['code'] != 0:
             raise RuntimeError(f"Start profile failed: {response.get('msg', 'unknown error')}")
@@ -283,8 +276,7 @@ class MoreLoginAPI:
         """
         request_path = '/api/env/close'
         data = {'envId': env_id, 'uniqueId': ''}
-        headers = requestHeader(APPID, SECRETKEY)
-        response = postRequest(BASEURL + request_path, data, headers).json()
+        response = postRequest(BASEURL + request_path, data).json()
         return response['code'] != -1
 
     @staticmethod
@@ -302,9 +294,7 @@ class MoreLoginAPI:
         data = {"envIds": [env_id], "removeEnvData": True}
 
         for attempt in range(MAX_RETRIES):
-            headers = requestHeader(APPID, SECRETKEY)
-            headers['Content-Type'] = 'application/json'
-            response = postRequest(BASEURL + request_path, data, headers).json()
+            response = postRequest(BASEURL + request_path, data).json()
 
             if response['code'] == 0 and response.get('data'):
                 return True
