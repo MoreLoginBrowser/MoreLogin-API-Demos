@@ -41,20 +41,20 @@ from base_morelogin.base_func import requestHeader, postRequest
 # ==================== Configuration ====================
 
 # MoreLogin API credentials (get from profile list page → API button)
-APPID = '1606746458587128'
-SECRETKEY = '29d7c664af4f4963af67c4bb22a74d75'
+APPID = ''
+SECRETKEY = ''
 
 # MoreLogin server address
-BASEURL = 'http://192.168.226.131:40000'
+BASEURL = 'http://serverIP:MoreLoginLocalAPIPort'
 
 # CDP connection host (same as MoreLogin server)
-CDP_HOST = '192.168.226.131'
+CDP_HOST = 'serverIP'
 
 # SSH config for remote socat port forwarding
-SSH_USER = 'kxc'
+SSH_USER = 'server user name'
 SSH_HOST = CDP_HOST
 SSH_PORT = 22
-SSH_PASSWORD = 'root'
+SSH_PASSWORD = 'password'
 SSH_KEY_PATH = ''  # Path to SSH private key (leave empty to use password)
 
 # Stress test parameters
