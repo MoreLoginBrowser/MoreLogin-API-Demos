@@ -7,9 +7,9 @@ Description:
     Runs N concurrent tasks with configurable concurrency. Each task:
       1. Creates a browser profile
       2. Starts the browser (headless)
-      3. Sets up socat port forwarding (remote → local)
+      3. Sets up socat port forwarding (remote -> local)
       4. Connects via CDP using Playwright
-      5. Opens a page and takes a screenshot
+      5. Opens a page and verifies the title
       6. Cleans up all resources
 
     Reports success/failure statistics at the end.
@@ -19,18 +19,18 @@ Prerequisites:
     playwright install chromium
 
 Usage:
-    python stress_test_cdp.py
+    python linux_server_test.py
 
 Configuration:
     Modify the "Configuration" section below to match your environment.
 """
 
+from __future__ import annotations
+
 import random
 import subprocess
 import time
 import traceback
-from datetime import datetime
-from pathlib import Path
 
 import asyncio
 from playwright.async_api import async_playwright, Playwright
@@ -43,14 +43,18 @@ from base_morelogin.base_func import postRequest
 # MoreLogin server address
 BASEURL = 'http://{server-ip}:{server-port}'
 
+# MoreLogin API authentication
+API_ID = '{your-api-id}'
+API_KEY = '{your-api-key}'
+
 # CDP connection host (same as MoreLogin server)
 CDP_HOST = '{server-ip}'
 
 # SSH config for remote socat port forwarding
-SSH_USER = 'server user name'
+SSH_USER = '{ssh-username}'
 SSH_HOST = CDP_HOST
 SSH_PORT = 22
-SSH_PASSWORD = 'password'
+SSH_PASSWORD = '{ssh-password}'
 SSH_KEY_PATH = ''  # Path to SSH private key (leave empty to use password)
 
 # Stress test parameters
@@ -60,7 +64,63 @@ TOTAL_RUNS = 100   # Total number of tasks to execute
 # Retry & timeout settings
 MAX_RETRIES = 5           # Max retries for API calls
 CDP_CONNECT_TIMEOUT = 30  # CDP connection timeout (seconds)
-PAGE_TIMEOUT = 60         # Page load timeout (seconds)
+TASK_TIMEOUT = 180        # Overall timeout per task (seconds)
+
+
+def validate_config():
+    """Validate that placeholder values have been replaced before running."""
+    checks = {
+        'BASEURL': BASEURL,
+        'CDP_HOST': CDP_HOST,
+        'SSH_USER': SSH_USER,
+        'API_ID': API_ID,
+        'API_KEY': API_KEY,
+    }
+    # SSH_PASSWORD only needs checking if no key path is provided
+    if not SSH_KEY_PATH:
+        checks['SSH_PASSWORD'] = SSH_PASSWORD
+
+    for name, value in checks.items():
+        if '{' in value and '}' in value:
+            raise SystemExit(
+                f"ERROR: Please update the configuration variable '{name}' "
+                f"(current value: '{value}'). Replace placeholder values with "
+                f"your actual server details before running."
+            )
+
+
+# ==================== Authentication ====================
+
+def login() -> bool:
+    """
+    Authenticate with MoreLogin API before running tasks.
+
+    Calls the /api/user/login endpoint with API_ID and API_KEY.
+    This must succeed before any browser profile operations can proceed.
+
+    Returns:
+        True if login succeeded, False otherwise.
+    """
+    request_path = '/api/user/login'
+    data = {
+        "apiId": API_ID,
+        "apiKey": API_KEY,
+    }
+
+    try:
+        response = postRequest(BASEURL + request_path, data).json()
+        if response.get('code') == 0:
+            print("[Auth] Login successful.")
+            return True
+        else:
+            print(
+                f"[Auth] Login failed: "
+                f"code={response.get('code')}, msg={response.get('msg', 'unknown')}"
+            )
+            return False
+    except Exception as e:
+        print(f"[Auth] Login request error: {e}")
+        return False
 
 
 # ==================== SSH & Socat Port Forwarding ====================
@@ -75,19 +135,18 @@ class SocatForwarder:
     """
 
     @staticmethod
-    def start(task_id: int, original_port: int) -> tuple:
+    def start(task_id: int, original_port: int) -> tuple[int, str | None]:
         """
         Start socat port forwarding on the remote server.
 
         Args:
-            task_id: Task identifier for logging
-            original_port: The original CDP debug port (bound to 127.0.0.1)
+            task_id: Task identifier for logging.
+            original_port: The original CDP debug port (bound to 127.0.0.1).
 
         Returns:
             (forward_port, remote_pid): The public port and remote process ID.
             If forwarding fails, returns (original_port, None).
         """
-        # Use random high port to avoid collisions between concurrent tasks
         forward_port = random.randint(50000, 60000)
         remote_cmd = (
             f'nohup socat TCP-LISTEN:{forward_port},fork,reuseaddr,bind=0.0.0.0 '
@@ -105,7 +164,10 @@ class SocatForwarder:
                 print(f'[Task {task_id}] socat: unexpected output: {output}')
                 return int(original_port), None
 
-            print(f'[Task {task_id}] socat: forwarding 0.0.0.0:{forward_port} → 127.0.0.1:{original_port} (pid={remote_pid})')
+            print(
+                f'[Task {task_id}] socat: forwarding '
+                f'0.0.0.0:{forward_port} -> 127.0.0.1:{original_port} (pid={remote_pid})'
+            )
             return forward_port, remote_pid
 
         except Exception as e:
@@ -136,7 +198,7 @@ class SSHClient:
     """
 
     @staticmethod
-    def exec_command(remote_cmd: str) -> str:
+    def exec_command(remote_cmd: str) -> str | None:
         """
         Execute a command on the remote server via SSH.
 
@@ -153,7 +215,7 @@ class SSHClient:
             return SSHClient._exec_system(remote_cmd)
 
     @staticmethod
-    def _exec_paramiko(remote_cmd: str) -> str:
+    def _exec_paramiko(remote_cmd: str) -> str | None:
         """Execute via paramiko SSH library (works on all platforms)."""
         import paramiko
 
@@ -173,13 +235,13 @@ class SSHClient:
 
         try:
             client.connect(**connect_kwargs)
-            stdin, stdout, stderr = client.exec_command(remote_cmd, timeout=15)
-            return stdout.read().decode('utf-8')
+            _, out_channel, _ = client.exec_command(remote_cmd, timeout=15)
+            return out_channel.read().decode('utf-8')
         finally:
             client.close()
 
     @staticmethod
-    def _exec_system(remote_cmd: str) -> str:
+    def _exec_system(remote_cmd: str) -> str | None:
         """Execute via system ssh binary (Linux/macOS fallback)."""
         ssh_cmd = [
             'ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'ConnectTimeout=10',
@@ -201,12 +263,15 @@ class MoreLoginAPI:
     """
     Wrapper for MoreLogin REST API operations used in stress testing.
 
+    All methods are synchronous (using requests library) and should be called
+    via asyncio.to_thread() when used in async context.
+
     API Documentation:
         https://docs.morelogin.com/l/en/interface-documentation/browser-profile
     """
 
     @staticmethod
-    def create_profile() -> str:
+    def create_profile() -> str | None:
         """
         Create a browser profile with retry logic.
 
@@ -228,14 +293,16 @@ class MoreLoginAPI:
 
             if attempt < MAX_RETRIES - 1:
                 wait_time = (2 ** attempt) + random.uniform(0.5, 1.5)
-                print(f"  [create_profile] Attempt {attempt + 1} failed (code={response['code']}), "
-                      f"retrying in {wait_time:.1f}s...")
+                print(
+                    f"  [create_profile] Attempt {attempt + 1} failed "
+                    f"(code={response['code']}), retrying in {wait_time:.1f}s..."
+                )
                 time.sleep(wait_time)
 
         return None
 
     @staticmethod
-    def start_profile(env_id: str) -> tuple:
+    def start_profile(env_id: str) -> tuple[str, int]:
         """
         Start a browser profile in headless mode.
 
@@ -257,7 +324,10 @@ class MoreLoginAPI:
         response = postRequest(request_path, data).json()
 
         if response['code'] != 0:
-            raise RuntimeError(f"Start profile failed: {response.get('msg', 'unknown error')}")
+            raise RuntimeError(
+                f"Start profile failed (envId={env_id}): "
+                f"{response.get('msg', 'unknown error')}"
+            )
 
         port = response['data']['debugPort']
         cdp_url = f'http://{CDP_HOST}:{port}'
@@ -308,13 +378,17 @@ class MoreLoginAPI:
 
 # ==================== Single Task Execution ====================
 
-async def run_single_task(task_id: int, playwright: Playwright) -> tuple:
+async def run_single_task(task_id: int, playwright: Playwright) -> tuple[bool, str | None]:
     """
     Execute a single stress test task (full lifecycle).
 
     Workflow:
-        1. Create profile → 2. Start browser → 3. Setup socat forwarding
-        → 4. Connect CDP → 5. Navigate & screenshot → 6. Cleanup
+        1. Create profile
+        2. Start browser
+        3. Setup socat forwarding
+        4. Connect CDP
+        5. Navigate & verify page title
+        6. Cleanup
 
     Args:
         task_id: Unique task identifier for logging.
@@ -325,31 +399,41 @@ async def run_single_task(task_id: int, playwright: Playwright) -> tuple:
     """
     env_id = None
     remote_pid = None
-    screenshot_path = None
+    browser = None
+    start_ts = time.monotonic()
 
     try:
         # Step 1: Create browser profile
-        env_id = MoreLoginAPI.create_profile()
+        env_id = await asyncio.to_thread(MoreLoginAPI.create_profile)
         if not env_id:
             return False, "Failed to create profile after retries"
         print(f'[Task {task_id}] Profile created: {env_id}')
 
         # Step 2: Start browser profile (headless)
-        cdp_url, original_port = MoreLoginAPI.start_profile(env_id)
+        cdp_url, original_port = await asyncio.to_thread(
+            MoreLoginAPI.start_profile, env_id
+        )
         print(f'[Task {task_id}] Browser started, debug port: {original_port}')
 
         # Step 3: Setup socat port forwarding
-        forward_port, remote_pid = SocatForwarder.start(task_id, original_port)
+        forward_port, remote_pid = await asyncio.to_thread(
+            SocatForwarder.start, task_id, original_port
+        )
         await asyncio.sleep(3)  # Wait for socat to be ready
 
         cdp_url_final = f'http://{CDP_HOST}:{forward_port}' if remote_pid else cdp_url
 
+        # Check task-level timeout
+        elapsed = time.monotonic() - start_ts
+        if elapsed > TASK_TIMEOUT:
+            return False, f"Task timed out after {elapsed:.0f}s (during setup)"
+
         # Step 4: Connect via CDP (with retries)
-        browser = None
         for attempt in range(MAX_RETRIES):
             try:
+                remaining = max(5000, int((TASK_TIMEOUT - (time.monotonic() - start_ts)) * 1000))
                 browser = await playwright.chromium.connect_over_cdp(
-                    cdp_url_final, timeout=CDP_CONNECT_TIMEOUT * 1000
+                    cdp_url_final, timeout=min(CDP_CONNECT_TIMEOUT * 1000, remaining)
                 )
                 break
             except Exception as e:
@@ -357,40 +441,50 @@ async def run_single_task(task_id: int, playwright: Playwright) -> tuple:
                     print(f'[Task {task_id}] CDP connect attempt {attempt + 1} failed, retrying...')
                     await asyncio.sleep(3 + attempt)
                 else:
-                    raise RuntimeError(f"CDP connection failed after {MAX_RETRIES} attempts: {e}")
+                    raise RuntimeError(
+                        f"CDP connection failed after {MAX_RETRIES} attempts: {e}"
+                    )
 
-        # Step 5: Navigate and take screenshot
-        context = browser.contexts[0]
+        # Step 5: Navigate and verify page
+        contexts = browser.contexts
+        if not contexts:
+            raise RuntimeError("No browser context available after CDP connection")
+
+        context = contexts[0]
         page = await context.new_page()
-        await page.goto('https://www.google.com', timeout=PAGE_TIMEOUT * 1000)
-        await page.wait_for_load_state('load', timeout=PAGE_TIMEOUT * 1000)
 
-        screenshot_dir = Path(__file__).resolve().parent / 'screenshots'
-        screenshot_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        screenshot_path = screenshot_dir / f"stress_task{task_id}_{timestamp}.png"
-        await page.screenshot(path=str(screenshot_path), full_page=True, timeout=PAGE_TIMEOUT * 1000)
-        print(f'[Task {task_id}] Screenshot saved: {screenshot_path.name}')
+        remaining_ms = max(5000, int((TASK_TIMEOUT - (time.monotonic() - start_ts)) * 1000))
+        await page.goto('https://www.google.com', timeout=remaining_ms)
+        await page.wait_for_load_state('load', timeout=remaining_ms)
+
+        title = await page.title()
+        print(f'[Task {task_id}] Page title: {title}')
 
         await page.close()
-        await browser.close()
-
-        print(f'[Task {task_id}] ✓ SUCCESS')
+        print(f'[Task {task_id}] SUCCESS')
         return True, None
 
     except Exception as e:
         error_msg = traceback.format_exc()
-        print(f'[Task {task_id}] ✗ FAILED: {e}')
+        print(f'[Task {task_id}] FAILED: {e}')
         return False, error_msg
 
     finally:
+        # Cleanup: disconnect browser
+        if browser:
+            try:
+                await browser.close()
+            except Exception:
+                pass
+
         # Cleanup: stop socat forwarding
-        SocatForwarder.stop(remote_pid)
+        if remote_pid:
+            await asyncio.to_thread(SocatForwarder.stop, remote_pid)
 
         # Cleanup: close browser profile
         if env_id:
             try:
-                MoreLoginAPI.stop_profile(env_id)
+                await asyncio.to_thread(MoreLoginAPI.stop_profile, env_id)
             except Exception:
                 pass
 
@@ -398,15 +492,8 @@ async def run_single_task(task_id: int, playwright: Playwright) -> tuple:
         if env_id:
             try:
                 await asyncio.sleep(1)
-                MoreLoginAPI.delete_profile(env_id)
+                await asyncio.to_thread(MoreLoginAPI.delete_profile, env_id)
                 print(f'[Task {task_id}] Profile deleted: {env_id}')
-            except Exception:
-                pass
-
-        # Cleanup: remove screenshot (only needed for verification)
-        if screenshot_path and screenshot_path.exists():
-            try:
-                screenshot_path.unlink()
             except Exception:
                 pass
 
@@ -418,6 +505,17 @@ async def main():
     Run the stress test with configured concurrency and total runs.
     Uses asyncio.Semaphore to limit concurrent browser sessions.
     """
+    validate_config()
+
+    # Authenticate before running stress test
+    print("[Auth] Logging in to MoreLogin API...")
+    if not login():
+        raise SystemExit(
+            "ERROR: Authentication failed. Please check your API_ID and API_KEY "
+            "configuration, and ensure the MoreLogin server is reachable."
+        )
+    print()
+
     print("=" * 60)
     print(f"  MoreLogin CDP Stress Test")
     print(f"  Concurrency: {CONCURRENCY} concurrent sessions")
@@ -427,14 +525,17 @@ async def main():
     print()
 
     start_time = time.time()
-    results = []  # [(task_id, success, error_msg)]
+    results: asyncio.Queue[tuple[int, bool, str | None]] = asyncio.Queue()
     semaphore = asyncio.Semaphore(CONCURRENCY)
 
     async def worker(task_id: int, pw: Playwright):
         """Worker coroutine that respects concurrency limit."""
         async with semaphore:
-            success, error_msg = await run_single_task(task_id, pw)
-            results.append((task_id, success, error_msg))
+            try:
+                success, error_msg = await run_single_task(task_id, pw)
+                await results.put((task_id, success, error_msg))
+            except Exception as e:
+                await results.put((task_id, False, str(e)))
 
     async with async_playwright() as playwright:
         tasks = [worker(i + 1, playwright) for i in range(TOTAL_RUNS)]
@@ -442,8 +543,13 @@ async def main():
 
     elapsed = time.time() - start_time
 
+    # Collect results from queue
+    all_results: list[tuple[int, bool, str | None]] = []
+    while not results.empty():
+        all_results.append(await results.get())
+
     # Print statistics
-    success_count = sum(1 for _, s, _ in results if s)
+    success_count = sum(1 for _, s, _ in all_results if s)
     failure_count = TOTAL_RUNS - success_count
 
     print()
@@ -465,9 +571,8 @@ async def main():
         print()
         print("  Failed task details:")
         print("-" * 60)
-        for task_id, success, error_msg in results:
+        for task_id, success, error_msg in all_results:
             if not success:
-                # Show first 200 chars of error
                 short_err = (error_msg or 'Unknown error').strip().split('\n')[-1][:200]
                 print(f"  [Task {task_id}] {short_err}")
         print()
